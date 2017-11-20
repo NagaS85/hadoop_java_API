@@ -15,6 +15,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 
 import org.apache.hadoop.conf.Configuration;
@@ -29,7 +30,7 @@ public class DataIngestion {
 	private static BufferedWriter out = null;
 	private static LoadProperties props = LoadProperties.getInstance();
 	final static Logger logger = Logger.getLogger(DataIngestion.class);
-	
+	private static ReentrantLock l = new ReentrantLock();
 	public static void main(String[] args) throws IOException, InterruptedException, ExecutionException {
 		
 		//List of workbooks
@@ -39,19 +40,20 @@ public class DataIngestion {
             @Override
             public void run(){
                 //This task will be executed once all thread reaches barrier
-                logger.info("All Threads are arrived at barrier");
-                File files = new File(args[0]);
+                System.out.println("All Threads are arrived at barrier");
+                
+                /*File files = new File(args[0]);
                 if(files.isDirectory())
         		{
                 	for (File file : files.listFiles()) {
                 		if(file.delete())
 							try {
-								logger.info("Deleted processed file from inputpath.."+file.getCanonicalPath());
+								System.out.println("Deleted processed file from inputpath.."+file.getCanonicalPath());
 							} catch (IOException e) {
 								e.printStackTrace();
 							}
                 	}
-        		}
+        		}*/
             }
         });
 
@@ -62,7 +64,7 @@ public class DataIngestion {
 
 			@Override
 			public void accept(String t)  {
-				DataIngestionCallable callable = new DataIngestionCallable(args[0],t,args[1],cb);
+				DataIngestionCallable callable = new DataIngestionCallable(args[0],t,args[1],cb,l);
 				Future<Set<FileMetaData>> result = executor.submit(callable);
 				resultSet.add(result);
 			}
@@ -96,9 +98,9 @@ public static Set<String> getBookNames(String inputfolderPath)
 public static void metaDataFileWrite(Set<Future<Set<FileMetaData>>> metadataList,String outputPath)
 {
 	try {
-		
 		File outfile = new File(outputPath+"/"+props.getValue("META_DATA_FILE_NAME"));
 		metadataList.forEach( new Consumer<Future<Set<FileMetaData>>>() {
+			
 		@Override
 		public void accept(Future<Set<FileMetaData>> t) {
 			try {
@@ -110,15 +112,16 @@ public static void metaDataFileWrite(Set<Future<Set<FileMetaData>>> metadataList
 							out = new BufferedWriter(fstream);
 							out.write(t.getFileName());
 							out.newLine();
+							out.close();
 						} catch (IOException e) {
 							e.printStackTrace();
 						}
+						
 					}
+					
 				});
-				out.close();
+				
 			} catch (InterruptedException | ExecutionException e) {
-				e.printStackTrace();
-			} catch (IOException e) {
 				e.printStackTrace();
 			}
 		}
@@ -130,31 +133,33 @@ public static void metaDataFileWrite(Set<Future<Set<FileMetaData>>> metadataList
 }
 public static void writeFilesToHdfs(String localPath)
 {
-	logger.info("Enter into writeFilesToHdfs....");
+	System.out.println("Enter into writeFilesToHdfs....");
 	Configuration conf = new Configuration();
 	String hdfsPath=props.getValue("HDFS_FOLDER_PATH");
-	logger.info("localPath...."+localPath);
 	File files = new File(localPath);
+	int counter=0;
 	try {
 		FileSystem hdfs = FileSystem.get(URI.create(props.getValue("HDFS_URL")), conf);
 		 //==== Create folder if not exists
 	      Path newFolderPath= new Path(hdfsPath);
-	      logger.info("is Path contains...."+hdfs.exists(newFolderPath));
 	      if(!hdfs.exists(newFolderPath)) {
 	         // Create new Directory
 	    	  hdfs.mkdirs(newFolderPath);
-	    	  logger.info("Path "+hdfsPath+" created.");
+	    	  System.out.println("Path "+hdfsPath+" created.");
 	      }
 	      if(hdfs.exists(newFolderPath)) {
 	    	  if(files.isDirectory())
 	  		{
-	    		  logger.info("files.isDirectory()...."+files.isDirectory());
+	    		  System.out.println(" HDFS Path already available ...");
 	    		  for (File file : files.listFiles()) {
-	    			  logger.info("localPath...."+localPath+"/"+file.getName());
 	    			  hdfs.copyFromLocalFile(new Path(localPath+"/"+file.getName()), new Path(hdfsPath));
+	    			  counter = counter+1;
 	    		  }
 	  		}
 		   }
+	      if(files.listFiles().length==counter){
+	    	  System.out.println("No of files copied form local to HDFS:"+counter);
+	      }
 		
 	} catch (IOException e) {
 		e.printStackTrace();
