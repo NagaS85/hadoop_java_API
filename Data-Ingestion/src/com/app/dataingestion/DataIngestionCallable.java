@@ -15,28 +15,28 @@ import org.apache.log4j.Logger;
 import com.app.dataingestion.model.FileMetaData;
 import com.app.dataingestion.service.FileTypeFactory;
 
-public class DataIngestionCallable implements Callable<Set<FileMetaData>> {
+public class DataIngestionCallable implements Callable<String> {
 
 	final static Logger logger = Logger.getLogger(DataIngestionCallable.class);
-	String bookName=null;
+	String fileName=null;
 	String outPath=null;
 	String inPath=null;
 	Set<FileMetaData> set=null;
 	private CyclicBarrier barrier;
 	private static ReentrantLock l;
 	private String fileType;
-	
+	private static String mergeFileName;
 	/**
 	 * @param inPath - input source path
-	 * @param bookName - bookName to identify
+	 * @param fileName - bookName to identify
 	 * @param outPath - output folder path
 	 * @param barrier - CyclicBarrier
 	 * @param l - lock 
 	 * @param fileType - type of file (CSV or JSON etc)and should be case-sensitive
 	 */
-	public DataIngestionCallable(String inPath, String bookName,String outPath,CyclicBarrier barrier,ReentrantLock l, String fileType) {
+	public DataIngestionCallable(String inPath, String fileName,String outPath,CyclicBarrier barrier,ReentrantLock l, String fileType) {
 		this.inPath = inPath;
-		this.bookName = bookName;
+		this.fileName = fileName;
 		this.outPath = outPath;
 		this.barrier = barrier;
 		DataIngestionCallable.l=l;
@@ -45,13 +45,11 @@ public class DataIngestionCallable implements Callable<Set<FileMetaData>> {
 	}
 	
 	@Override
-	public Set<FileMetaData> call() throws Exception {
+	public String call() throws Exception {
 		try {
-			l.lock();// get lock to perform safe operations
+			//l.lock();// get lock to perform safe operations
 			// FileType is CSV or JSON etc.argument should be case-sensitive.
-			set = FileTypeFactory.valueOf(fileType).getFileOperation().mergeFiles(inPath, bookName, outPath);
-			//set = mergeFiles(inPath,bookName,outPath);
-			l.unlock();// unlock thread 
+			mergeFileName = FileTypeFactory.valueOf(fileType).getFileOperation().mergeFiles(inPath, fileName, outPath);
 			System.out.println(Thread.currentThread().getName() + " is waiting on barrier");
 			barrier.await();
 			System.out.println(Thread.currentThread().getName() + " has crossed the barrier");
@@ -63,7 +61,7 @@ public class DataIngestionCallable implements Callable<Set<FileMetaData>> {
 			ex.printStackTrace();
         }
 
-	return set;
+	return mergeFileName;
 	}
 
 

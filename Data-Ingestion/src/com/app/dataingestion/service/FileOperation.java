@@ -21,8 +21,16 @@ public interface FileOperation {
 	 * @return fileMetaData set
 	 * @throws IOException
 	 */
-	public Set<FileMetaData> mergeFiles(String inPath,String bookName,String outPath) throws IOException;
+	public Set<FileMetaData> mergeFilesByCategory(String inPath,String bookName,String outPath) throws IOException;
 	
+	/**
+	 * @param inPath - 
+	 * @param bookName
+	 * @param outPath
+	 * @return fileMetaData set
+	 * @throws IOException
+	 */
+	public String mergeFiles(String inPath,String bookName,String outPath) throws IOException;
 	/**
 	 * @param outPath
 	 * @return fileMetaData set
