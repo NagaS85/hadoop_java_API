@@ -14,8 +14,10 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.text.SimpleDateFormat;
 import java.time.LocalDate;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
@@ -117,12 +119,12 @@ public class CSVFileOperation implements FileOperation{
 			String outPath) throws IOException {
 		
 		
-		Set<FileMetaData> set1 = new HashSet<>();
-		File outMetafile = new File(outPath+"/"+props.getValue("META_DATA_FILE_NAME"));
-		File outfile =new File(outPath+"/merge_"+LocalDate.now()+".csv");
+		File fileNamesLogfile = new File(inPath+"/"+props.getValue("META_DATA_FILE_NAME"));
+		File outfile =new File(outPath+"/merge_"+new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss").format(new Date())+".csv");
 		System.out.println("outPath........."+outPath);
 		FileWriter fw =null;
 		BufferedWriter buffer =null;
+		Set<FileMetaData> metaDataSet =  readMetaDataFile(inPath);
 		try {
 			File files = new File(inPath);
 			
@@ -134,9 +136,21 @@ public class CSVFileOperation implements FileOperation{
 				for (File file : files.listFiles()) {
 					FileWriter outFileWriter = new FileWriter(outfile, true);
 					BufferedWriter outBuffer = new BufferedWriter(outFileWriter);
+					Optional<FileMetaData> result = metaDataSet
+							.stream()
+							.parallel()
+							.filter(n -> n.getFileName().equalsIgnoreCase(
+									file.getName())).findAny();
 					
-					 
+					
 					if (file.isFile() && file.getName().contains(fileName)) {
+						
+						if(result.isPresent()==true )
+						{
+							System.out.println("File '"+file.getName()+"' already processed ");
+						}
+						else{
+						
 						FileInputStream fis = new FileInputStream(file);
 							BufferedReader in = new BufferedReader(new InputStreamReader(fis));
 							String aLine;
@@ -147,7 +161,7 @@ public class CSVFileOperation implements FileOperation{
 							}
 							in.close();
 							
-							System.out.println("filepath...."+file.getAbsolutePath());
+							//System.out.println("filepath...."+file.getAbsolutePath());
 							//zipArchiveFiles(file.getAbsolutePath(),file.lastModified());
 							
 							fis.close();
@@ -155,12 +169,16 @@ public class CSVFileOperation implements FileOperation{
 							fileMetaData.setFileName(outfile.getName());	
 							set1.add(fileMetaData);
 							*/
-							fw = new FileWriter(outMetafile, true);
+							fw = new FileWriter(fileNamesLogfile, true);
 							buffer = new BufferedWriter(fw);
-							buffer.write(file.getName());
-							buffer.newLine();
+							if(!props.getValue("META_DATA_FILE_NAME").equalsIgnoreCase(file.getName())) // need not to log metadata_flatfile.csv in same file since it is in local Dir.
+							{
+								buffer.write(file.getName());
+								buffer.newLine();
+							}
 							buffer.close();
 					}
+					}		
 					outBuffer.flush();
 					outBuffer.close();
 				
@@ -182,10 +200,10 @@ public class CSVFileOperation implements FileOperation{
 	 * @see com.naga.utils.FileOperation#readMetaDataFile(java.lang.String)
 	 */
 	@Override
-	public Set<FileMetaData> readMetaDataFile(String outPath) {
+	public Set<FileMetaData> readMetaDataFile(String dir) {
 
 		Set<FileMetaData> processedFilenames = new HashSet<>();
-		File file = new File(outPath+"/"+props.getValue("META_DATA_FILE_NAME"));
+		File file = new File(dir+"/"+props.getValue("META_DATA_FILE_NAME"));
 				if (file.isFile()) {
 					FileInputStream fis;
 					try {
