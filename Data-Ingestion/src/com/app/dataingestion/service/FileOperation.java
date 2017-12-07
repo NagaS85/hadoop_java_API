@@ -14,15 +14,7 @@ import com.app.dataingestion.model.FileMetaData;
  */
 public interface FileOperation {
 	
-	/**
-	 * @param inPath - 
-	 * @param bookName
-	 * @param outPath
-	 * @return fileMetaData set
-	 * @throws IOException
-	 */
-	public Set<FileMetaData> mergeFilesByCategory(String inPath,String bookName,String outPath) throws IOException;
-	
+		
 	/**
 	 * @param inPath - 
 	 * @param bookName

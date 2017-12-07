@@ -7,22 +7,19 @@ import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.text.SimpleDateFormat;
-import java.time.LocalDate;
 import java.util.Date;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipOutputStream;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.app.dataingestion.DataIngestionCallable;
 import com.app.dataingestion.model.FileMetaData;
 import com.app.dataingestion.util.LoadProperties;
 
@@ -33,79 +30,9 @@ import com.app.dataingestion.util.LoadProperties;
 public class CSVFileOperation implements FileOperation{
 	
 	private static LoadProperties props = LoadProperties.getInstance();
+	final static Logger logger = LoggerFactory.getLogger(CSVFileOperation.class);
 	
 	
-	/**
-	 * Merge small files with respect to each workname.
-	   csv files should contain the headers since header is removed while merging files.
-	 */
-	
-	/* (non-Javadoc)
-	 * @see com.naga.utils.FileOperation#mergeFiles(java.lang.String, java.lang.String, java.lang.String)
-	 */
-	@Override
-	public Set<FileMetaData> mergeFilesByCategory(String inPath, String bookName,
-			String outPath) throws IOException {
-		
-		
-		
-		//l.lock(); // get lock to perform safe operations
-		File files = new File(inPath);
-		File outfile =new File(outPath+"/"+bookName+"_merge_"+LocalDate.now()+".csv");
-		FileWriter fstream = null;
-		BufferedWriter out = null;
-		Set<FileMetaData> metaDataSet =  readMetaDataFile(outPath);
-		//System.out.println("metaDataSet size...."+metaDataSet.size());
-		Set<FileMetaData> set1=null;
-		if(files.isDirectory())
-		{
-			try {
-				fstream = new FileWriter(outfile, true);
-				out = new BufferedWriter(fstream);
-			} catch (IOException e1) {
-				e1.printStackTrace();
-			}
-			set1 = new HashSet<>();
-			for (File file : files.listFiles()) {
-				FileInputStream fis;
-				List<FileMetaData> filterData = metaDataSet.stream()
-						.filter(n -> file.getName().equals(n.getFileName()))
-						.collect(Collectors.toList());
-						
-				
-				if (file.isFile() && file.getName().contains(bookName)) {
-					if(filterData.size()==1 && file.getName().equals(filterData.get(0).getFileName()))
-					{
-						System.out.println("File '"+file.getName()+"' already processed and merged to : "+outfile);
-					}
-					else{
-						
-						fis = new FileInputStream(file);
-						BufferedReader in = new BufferedReader(new InputStreamReader(fis));
-						String aLine;
-						aLine = in.readLine();//skipping header from csv
-						while ((aLine = in.readLine()) != null) {
-							out.write(file.getName()+","+aLine);//Adding filename column to identify data 
-							out.newLine();
-						}
-						in.close();
-						FileMetaData fileMetaData = new FileMetaData();
-						fileMetaData.setFileName(outfile.getName());	
-						set1.add(fileMetaData);
-					}
-				}
-				
-			//if(file.delete())
-				//System.out.println("File Deleted after ....."+file.getCanonicalPath());
-		}
-			out.close();
-		}
-		System.out.println("Completed...."+Thread.currentThread().getName());
-		return set1;
-		
-	
-	}
-
 	/**
 	 * Merge small files with respect to each workname.
 	   csv files should contain the headers since header is removed while merging files.
@@ -121,7 +48,7 @@ public class CSVFileOperation implements FileOperation{
 		
 		File fileNamesLogfile = new File(inPath+"/"+props.getValue("META_DATA_FILE_NAME"));
 		File outfile =new File(outPath+"/merge_"+new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss").format(new Date())+".csv");
-		System.out.println("outPath........."+outPath);
+		logger.debug("outPath........."+outPath);
 		FileWriter fw =null;
 		BufferedWriter buffer =null;
 		Set<FileMetaData> metaDataSet =  readMetaDataFile(inPath);
@@ -147,7 +74,7 @@ public class CSVFileOperation implements FileOperation{
 						
 						if(result.isPresent()==true )
 						{
-							System.out.println("File '"+file.getName()+"' already processed ");
+							logger.debug("File '"+file.getName()+"' already processed ");
 						}
 						else{
 						
@@ -160,15 +87,7 @@ public class CSVFileOperation implements FileOperation{
 								outBuffer.newLine();
 							}
 							in.close();
-							
-							//System.out.println("filepath...."+file.getAbsolutePath());
-							//zipArchiveFiles(file.getAbsolutePath(),file.lastModified());
-							
 							fis.close();
-							/*FileMetaData fileMetaData = new FileMetaData();
-							fileMetaData.setFileName(outfile.getName());	
-							set1.add(fileMetaData);
-							*/
 							fw = new FileWriter(fileNamesLogfile, true);
 							buffer = new BufferedWriter(fw);
 							if(!props.getValue("META_DATA_FILE_NAME").equalsIgnoreCase(file.getName())) // need not to log metadata_flatfile.csv in same file since it is in local Dir.
@@ -188,7 +107,7 @@ public class CSVFileOperation implements FileOperation{
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
-			System.out.println("Completed...."+Thread.currentThread().getName());
+		logger.debug("Completed...."+Thread.currentThread().getName());
 			return outfile.getCanonicalPath();
 		
 	

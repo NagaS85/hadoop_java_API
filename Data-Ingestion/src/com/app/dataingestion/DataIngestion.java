@@ -2,12 +2,10 @@ package com.app.dataingestion;
 
 import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.URI;
@@ -22,7 +20,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -35,6 +32,7 @@ import org.apache.hadoop.fs.Path;
 import com.app.dataingestion.model.FileMetaData;
 import com.app.dataingestion.service.FileTypeFactory;
 import com.app.dataingestion.util.LoadProperties;
+import org.slf4j.*;
 
 
 /**
@@ -49,11 +47,9 @@ public class DataIngestion {
 	 * args[1]= output  path
 	 * args[2]= FileType(Ex:CSV or JSON or TXT etc)
 	 */
-	//private static FileWriter fstream = null;
-	//private static BufferedWriter out = null;
 	private static LoadProperties props = LoadProperties.getInstance();
-	//final static Logger logger = Logger.getLogger(DataIngestion.class);
-	private static ReentrantLock l = new ReentrantLock();
+	final static Logger logger = LoggerFactory.getLogger(DataIngestion.class);
+	//private static ReentrantLock l = new ReentrantLock();
 	private static String mergeFileName;
 	
 	
@@ -83,16 +79,15 @@ public class DataIngestion {
 	public static void main(String[] args) throws IOException, InterruptedException, ExecutionException {
 		
 		//List of workbooks
-		//Set<String> booknames = getBookNames(args[0]);
 		Set<String> fileNames = getUnProcessedFileNames(args[0],args[2]);
 		
-		System.out.println("Un Processed Files:"+fileNames.size()+":::"+(fileNames.size()!=0 ? fileNames.size():"Exit"));
-
+		//System.out.println("Un Processed Files:"+fileNames.size()+":::"+(fileNames.size()!=0 ? fileNames.size():"Exit"));
+		logger.debug("Un Processed Files:"+fileNames.size()+":::"+(fileNames.size()!=0 ? fileNames.size():"Exit"));
 		Set<Future<String>> list = new HashSet<Future<String>>();
 		//Creating CyclicBarrier with number of file names threads.
 		if(fileNames.size()==0)
 		{
-			System.out.println("There are no files to process::Exit");
+			logger.debug("There are no files to process::Exit");
 			System.exit(0);
 		}
 			
@@ -102,7 +97,7 @@ public class DataIngestion {
         	@Override
             public void run(){
                 
-                System.out.println("All Threads are arrived at barrier");
+        		logger.debug("All Threads are arrived at barrier");
                 //
                 zipArchiveFiles(args[0],args[2]);
                
@@ -117,7 +112,10 @@ public class DataIngestion {
 
 			@Override
 			public void accept(String fileName)  {
-				DataIngestionCallable callable = new DataIngestionCallable(args[0],fileName,args[1],cb,l,args[2]);
+				DataIngestionCallable callable = new DataIngestionCallable(
+						args[0], fileName, args[1], cb, 
+						//l, 
+						args[2]);
 				Future<String> future = executor.submit(callable);
 				list.add(future);
 			}
@@ -127,12 +125,10 @@ public class DataIngestion {
                 //return value of Future, delay output in console
                 // because Future.get() waits for task to get completed.
             	setMergeFileName(f.get());
-            	//mergeFileName = f.get();
             } catch (InterruptedException | ExecutionException e) {
                 e.printStackTrace();
             }
         }  
-		 //System.out.println("mergeFileName.............."+getMergeFileName());
 		 if(getMergeFileName()!=null)
 		 {
 			 File mergeFile = new File(getMergeFileName());
@@ -140,10 +136,7 @@ public class DataIngestion {
 			 long split_files_Size=0;
 			 for (File file : fileList) {
 				 split_files_Size +=split_files_Size+file.length();
-				//System.out.println("file created...."+file.getCanonicalPath());
 			 }
-			 //System.out.println("split_files_Size.............."+split_files_Size);
-			 //System.out.println("mergeFile size.............."+mergeFile.length());
 			 if(mergeFile.length()==split_files_Size)
 				 mergeFile.delete();
 			 writeFilesToHdfs(args[1]);
@@ -218,55 +211,11 @@ public static Set<String> getUnProcessedFileNames(String inputDir,String fileTyp
 
 
 /**
- * Prepare the meta data file which contains name of the files from list of processed small files
- * 
- * @param metadataList
- * @param outputPath
- */
-public static void metaDataFileWrite(Set<Future<Set<FileMetaData>>> metadataList,String outputPath)
-{
-	try {
-		File outfile = new File(outputPath+"/"+props.getValue("META_DATA_FILE_NAME"));
-		metadataList.forEach( new Consumer<Future<Set<FileMetaData>>>() {
-			
-		@Override
-		public void accept(Future<Set<FileMetaData>> t) {
-			try {
-				t.get().forEach( new Consumer<FileMetaData>() {
-					@Override
-					public void accept(FileMetaData t) {
-						try {
-							FileWriter fstream = new FileWriter(outfile, true);
-							BufferedWriter out = new BufferedWriter(fstream);
-							out.write(t.getFileName());
-							out.newLine();
-							out.close();
-						} catch (IOException e) {
-							e.printStackTrace();
-						}
-						
-					}
-					
-				});
-				
-			} catch (InterruptedException | ExecutionException e) {
-				e.printStackTrace();
-			}
-		}
-	});
-		
-	} catch (Exception e) {
-		e.printStackTrace();
-	}
-}
-
-/**
  * write files to hdfs
- * @param localPath
+ * @param dir-directory where merge files available
  */
 public static void writeFilesToHdfs(String dir)
 {
-	System.out.println("Enter into writeFilesToHdfs....");
 	Configuration conf = new Configuration();
 	String hdfsPath=props.getValue("HDFS_FOLDER_PATH");
 	File files = new File(dir);
@@ -278,7 +227,7 @@ public static void writeFilesToHdfs(String dir)
 	      if(!hdfs.exists(newFolderPath)) {
 	         // Create new Directory
 	    	  hdfs.mkdirs(newFolderPath);
-	    	  System.out.println("Path "+hdfsPath+" created.");
+	    	  logger.debug("Path "+hdfsPath+" created.");
     		  for (File file : files.listFiles()) {
     			  //hdfs.copyFromLocalFile(new Path(dir+"/"+file.getName()), new Path(hdfsPath));
     			  hdfs.moveFromLocalFile(new Path(dir+"/"+file.getName()), new Path(hdfsPath));
@@ -288,9 +237,9 @@ public static void writeFilesToHdfs(String dir)
 	      if(hdfs.exists(newFolderPath)) {
 	    	  if(files.isDirectory())
 	  		{
-	    		  System.out.println(" HDFS Path already available ...");
+	    		  logger.debug(" HDFS Path already available ...");
 	    		  for (File file : files.listFiles()) {
-	    			  System.out.println("Written file in HdFS::"+file.getName());
+	    			  logger.debug("Written file in HdFS::"+file.getName());
 	    			  //hdfs.copyFromLocalFile(new Path(dir+"/"+file.getName()), new Path(hdfsPath));
 	    			  hdfs.moveFromLocalFile(new Path(dir+"/"+file.getName()), new Path(hdfsPath));
 	    			  counter = counter+1;
@@ -298,7 +247,7 @@ public static void writeFilesToHdfs(String dir)
 	  		}
 		   }
 	      if(files.listFiles().length==counter){
-	    	  System.out.println("No of files copied form local to HDFS:"+counter);
+	    	  logger.debug("No of files copied form local to HDFS:"+counter);
 	    	  
 	      }
 		
@@ -344,36 +293,28 @@ public static List<File> splitFile(File file, int sizeOfFileInMB,String outPutPa
 }
 
 	/**
-	 * @param inputDir
-	 * @param outputDir
-	 * @param fileType
+	 * @param inputDir-Directory where small files available
+	 * @param outputDir-Merge files location
+	 * @param fileType-Type of file
 	 */
 	private static void zipArchiveFiles(String inputDir,String fileType) {
 		try {
 			
 			Set<FileMetaData> metaDataSet =  FileTypeFactory.valueOf(fileType).getFileOperation().readMetaDataFile(inputDir);
-			 /*for (FileMetaData fileMetaData : metaDataSet) {
-				System.out.println("fileMetaData fileName........"+fileMetaData.getFileName());
-			}*/
 			// now zip files one by one
 			// create ZipOutputStream to write to the zip file
-			 
-			
 			File files = new File(inputDir);
 			if(new File(inputDir).isDirectory())
 			{
-				
-				
 				for (File file : files.listFiles()) {
 					
 					Optional<FileMetaData> result = metaDataSet.stream().parallel().filter(n->n.getFileName().equalsIgnoreCase(file.getName())).findAny();
-					//System.out.println("result......"+result.isPresent());
 					if(result.isPresent())
 					{
 						FileOutputStream fos = //new File
 								new FileOutputStream(props.getValue("ARCHIVE_FOLDER_PATH")+"/"+file.getName()+".zip",true);
 							ZipOutputStream zos = new ZipOutputStream(fos);
-							System.out.println("Zipping " + file.getName());
+							logger.debug("Zipping " + file.getName());
 							// for ZipEntry we need to keep only relative file path, so we
 							// used substring on absolute path
 							ZipEntry ze = new ZipEntry(file.getName());
@@ -387,8 +328,6 @@ public static List<File> splitFile(File file, int sizeOfFileInMB,String outPutPa
 							}
 							zos.closeEntry();
 							fis.close();
-							
-							//file.delete();//delete file from inputDir after processing.
 							zos.close();
 							fos.close();
 					}	
@@ -396,9 +335,6 @@ public static List<File> splitFile(File file, int sizeOfFileInMB,String outPutPa
 					}
 				
 			}
-				
-			
-			
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
